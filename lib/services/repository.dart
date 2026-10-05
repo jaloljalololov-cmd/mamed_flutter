@@ -60,7 +60,31 @@ class Repository {
         }).toList();
 
         await _db.savePatients(patients);
+
+        final Map<String, String> deptMap = {};
+        for (var p in patients) {
+          if (p.departmentId.isNotEmpty && p.department.isNotEmpty) {
+            deptMap[p.departmentId] = p.department;
+          }
+        }
+        final departments = deptMap.entries
+            .map((e) => Department(id: e.key, name: e.value))
+            .toList();
+        await _db.saveDepartments(departments);
       }
+
+      try {
+        final deptsData = await _api.getRequest('getDepartments/');
+        if (deptsData is List && deptsData.isNotEmpty) {
+          final depts = deptsData.map((d) {
+            return Department(
+              id: d['id'] ?? d['Подразделение'] ?? _uuid.v4(),
+              name: d['Наименование'] ?? d['ПодразделениеНаименование'] ?? 'Отделение',
+            );
+          }).toList();
+          await _db.saveDepartments(depts);
+        }
+      } catch (_) {}
 
       if (medsData is List) {
         final meds = medsData.map((m) {

@@ -29,7 +29,18 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final patients = await _repository.getPatients();
-    final depts = await _repository.getDepartments();
+    var depts = await _repository.getDepartments();
+
+    if (depts.isEmpty && patients.isNotEmpty) {
+      final Map<String, String> deptMap = {};
+      for (var p in patients) {
+        if (p.departmentId.isNotEmpty && p.department.isNotEmpty) {
+          deptMap[p.departmentId] = p.department;
+        }
+      }
+      depts = deptMap.entries.map((e) => Department(id: e.key, name: e.value)).toList();
+    }
+
     setState(() {
       _allPatients = patients;
       _departments = depts;

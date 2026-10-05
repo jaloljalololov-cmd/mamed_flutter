@@ -94,18 +94,29 @@ class ApiService {
       ...candidatePrefixes.where((p) => p != cachedPrefix)
     ];
 
+    final cleanEp = endpoint.replaceAll('/', '');
+    final endpointsToTry = <String>[
+      '$cleanEp/',
+      cleanEp,
+    ];
+
+    if (cleanEp.toLowerCase().contains('prescription')) {
+      endpointsToTry.addAll(['postPrescriptions/', 'postPrescriptions', 'createPrescription/', 'createPrescription', 'postDocument/', 'postDocument']);
+    } else if (cleanEp.toLowerCase().contains('cancellation')) {
+      endpointsToTry.addAll(['postCancellations/', 'postCancellations', 'createCancellation/', 'createCancellation', 'postCancellationDoc/', 'postCancellationDoc']);
+    }
+
     String lastServerError = '';
 
     for (var prefix in prefixesToTry) {
       final jsonBody = jsonEncode(body);
       final headers = _getHeaders(creds['username']!, creds['password']!);
 
-      // Try with slash and without slash
-      for (var ep in [endpoint, endpoint.replaceAll('/', '')]) {
+      for (var ep in endpointsToTry) {
         final urlStr = _buildUrl(creds['host']!, creds['port']!, creds['dbName']!, prefix, ep);
 
         try {
-          final response = await http.post(Uri.parse(urlStr), headers: headers, body: jsonBody).timeout(const Duration(seconds: 8));
+          final response = await http.post(Uri.parse(urlStr), headers: headers, body: jsonBody).timeout(const Duration(seconds: 10));
           if (response.statusCode == 200 || response.statusCode == 201) {
             await prefs.setString('workingPrefix', prefix);
             return true;
@@ -117,6 +128,6 @@ class ApiService {
         }
       }
     }
-    throw Exception(lastServerError.isNotEmpty ? lastServerError : 'Ошибка подключения');
+    throw Exception(lastServerError.isNotEmpty ? lastServerError : 'Ошибка подключения к 1С');
   }
 }
