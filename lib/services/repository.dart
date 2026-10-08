@@ -33,28 +33,36 @@ class Repository {
   Future<String> syncDirectories() async {
     try {
       final patientsData = await _api.getRequest('getPatients/');
-      await _api.getRequest('getDoctor/');
       final medsData = await _api.getRequest('getMedications/');
       final schedsData = await _api.getRequest('getSchedules/');
 
       if (patientsData is List) {
         final patients = patientsData.map((p) {
           final comments = p['Комментарии'] ?? [];
+          final rawPatientId = p['Пациент'] ?? p['id'] ?? p['GUID'] ?? _uuid.v4();
+          final rawPatientName = p['ПациентНаименование'] ?? p['ФИО'] ?? p['name'] ?? 'Без имени';
+          final rawMedCardId = p['МедицинскаяКарта'] ?? p['id'] ?? p['GUID'] ?? '';
+          final rawMedCardNum = p['МедицинскаяКартаНаименование'] ?? p['НомерМедицинскойКарты'] ?? p['НомерКарты'] ?? p['НомерИсторииБолезни'] ?? p['medCard'] ?? '—';
+          final rawDeptId = p['Подразделение'] ?? '';
+          final rawDeptName = p['ПодразделениеНаименование'] ?? p['Отделение'] ?? 'Отделение';
+          final rawDoctorId = p['ЛечащийВрач'] ?? '';
+          final rawDoctorName = p['ЛечащийВрачНаименование'] ?? p['Врач'] ?? 'Лечащий врач';
+
           return Patient(
-            id: p['Пациент'] ?? p['id'] ?? _uuid.v4(),
-            name: p['ПациентНаименование'] ?? p['ФИО'] ?? 'Без имени',
-            medCardId: p['МедицинскаяКарта'] ?? p['id'] ?? '',
-            medCard: p['МедицинскаяКартаНаименование'] ?? p['НомерМедицинскойКарты'] ?? '—',
-            age: p['Возраст'] ?? 0,
-            gender: p['Пол'] ?? 'Мужской',
-            departmentId: p['Подразделение'] ?? '',
-            department: p['ПодразделениеНаименование'] ?? 'Отделение',
-            doctorId: p['ЛечащийВрач'] ?? '',
-            doctor: p['ЛечащийВрачНаименование'] ?? 'Лечащий врач',
-            diet: p['Диета'] ?? 'Стол №1',
-            transportability: p['Транспортабельность'] ?? 'Ходячий',
-            status: p['Статус'] ?? 'На лечении',
-            condition: p['Состояние'] ?? 'Удовлетворительное',
+            id: rawPatientId.toString().trim(),
+            name: rawPatientName.toString().trim(),
+            medCardId: rawMedCardId.toString().trim(),
+            medCard: rawMedCardNum.toString().trim(),
+            age: p['Возраст'] is num ? (p['Возраст'] as num).toInt() : int.tryParse(p['Возраст']?.toString() ?? '0') ?? 0,
+            gender: (p['Пол'] ?? 'Мужской').toString().trim(),
+            departmentId: rawDeptId.toString().trim(),
+            department: rawDeptName.toString().trim(),
+            doctorId: rawDoctorId.toString().trim(),
+            doctor: rawDoctorName.toString().trim(),
+            diet: (p['Диета'] ?? 'Стол №1').toString().trim(),
+            transportability: (p['Транспортабельность'] ?? 'Ходячий').toString().trim(),
+            status: (p['Статус'] ?? 'На лечении').toString().trim(),
+            condition: (p['Состояние'] ?? 'Удовлетворительное').toString().trim(),
             commentsJson: jsonEncode(comments),
           );
         }).toList();
@@ -74,26 +82,38 @@ class Repository {
       }
 
       try {
-        final deptsData = await _api.getRequest('getDepartments/');
-        if (deptsData is List && deptsData.isNotEmpty) {
-          final depts = deptsData.map((d) {
-            return Department(
-              id: d['id'] ?? d['Подразделение'] ?? _uuid.v4(),
-              name: d['Наименование'] ?? d['ПодразделениеНаименование'] ?? 'Отделение',
-            );
-          }).toList();
-          await _db.saveDepartments(depts);
+        final doctorData = await _api.getRequest('getDoctor/');
+        if (doctorData is Map) {
+          final deptsList = doctorData['МассивОтделений'];
+          if (deptsList is List) {
+            final depts = deptsList.map((d) {
+              return Department(
+                id: (d['Отделение'] ?? _uuid.v4()).toString().trim(),
+                name: (d['НаименованиеОтделения'] ?? 'Отделение').toString().trim(),
+              );
+            }).where((d) => d.id.isNotEmpty && d.name.isNotEmpty).toList();
+
+            if (depts.isNotEmpty) {
+              await _db.saveDepartments(depts);
+            }
+          }
         }
       } catch (_) {}
 
       if (medsData is List) {
         final meds = medsData.map((m) {
+          final rawId = m['Номенклатура'] ?? m['id'] ?? m['GUID'] ?? m['Код'] ?? _uuid.v4();
+          final rawName = m['НоменклатураНаименование'] ?? m['МедикаментНаименование'] ?? m['ТоварНаименование'] ?? m['ПрепаратНаименование'] ?? m['НаименованиеНоменклатуры'] ?? m['name'] ?? m['Name'] ?? m['Наименование'] ?? m['Медикамент'] ?? m['Название'] ?? m['Представление'] ?? m['Препарат'] ?? m['Товар'] ?? 'Медикамент';
+          final rawStock = m['Доступно'] ?? m['ВНаличии'] ?? m['Остаток'] ?? m['КоличествоОстаток'] ?? m['Количество'] ?? m['stock'] ?? 0.0;
+          final rawUnitId = m['unitId'] ?? m['ЕдиницаИзмерения'] ?? m['ЕдИзм'] ?? '';
+          final rawUnitName = m['ЕдиницаИзмеренияНаименование'] ?? m['ЕдИзмНаименование'] ?? m['unitName'] ?? 'шт';
+
           return Medication(
-            id: m['Номенклатура'] ?? m['id'] ?? _uuid.v4(),
-            name: m['НоменклатураНаименование'] ?? m['Наименование'] ?? 'Медикамент',
-            stock: (m['Доступно'] ?? m['ВНаличии'] ?? m['stock'] as num?)?.toDouble() ?? 0.0,
-            unitId: m['ЕдиницаИзмерения'] ?? '',
-            unitName: m['ЕдиницаИзмеренияНаименование'] ?? 'шт',
+            id: rawId.toString().trim(),
+            name: rawName.toString().trim(),
+            stock: (rawStock is num) ? rawStock.toDouble() : double.tryParse(rawStock?.toString() ?? '0') ?? 0.0,
+            unitId: rawUnitId.toString().trim(),
+            unitName: rawUnitName.toString().trim(),
           );
         }).toList();
 
@@ -102,10 +122,14 @@ class Repository {
 
       if (schedsData is List) {
         final scheds = schedsData.map((s) {
+          final rawId = s['id'] ?? s['GUID'] ?? s['Код'] ?? _uuid.v4();
+          final rawName = s['Наименование'] ?? s['name'] ?? s['Name'] ?? s['Период'] ?? s['Расписание'] ?? s['Режим'] ?? 'Ежедневно';
+          final rawPeriod = s['Интервал'] ?? s['period'] ?? 'Ежедневно';
+
           return Schedule(
-            id: s['id'] ?? _uuid.v4(),
-            name: s['Наименование'] ?? s['name'] ?? 'Ежедневно',
-            period: s['Интервал'] ?? 'Ежедневно',
+            id: rawId.toString().trim(),
+            name: rawName.toString().trim(),
+            period: rawPeriod.toString().trim(),
           );
         }).toList();
 
