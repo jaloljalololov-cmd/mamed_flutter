@@ -137,21 +137,8 @@ class _CreatePrescriptionScreenState extends State<CreatePrescriptionScreen> {
     setState(() => _isSending = false);
 
     if (mounted) {
-      if (msg.contains('1С:') || msg.contains('локально')) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Ответ сервера 1С', style: TextStyle(color: Colors.red)),
-            content: Text(msg),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Понятно')),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-        Navigator.pop(context);
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      Navigator.pop(context);
     }
   }
 

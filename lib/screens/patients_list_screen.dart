@@ -17,6 +17,7 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
   List<Patient> _filteredPatients = [];
   List<Department> _departments = [];
   String _selectedDeptId = '';
+  String _selectedDeptName = '';
   String _searchQuery = '';
   bool _isLoading = true;
 
@@ -29,21 +30,38 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final patients = await _repository.getPatients();
-    var depts = await _repository.getDepartments();
+    final depts = await _repository.getDepartments();
 
-    if (depts.isEmpty && patients.isNotEmpty) {
-      final Map<String, String> deptMap = {};
-      for (var p in patients) {
-        if (p.departmentId.isNotEmpty && p.department.isNotEmpty) {
-          deptMap[p.departmentId] = p.department;
+    // Replicate Native Android departmentsList logic:
+    final Map<String, String> deptMap = {};
+    for (var d in depts) {
+      if (d.id.trim().isNotEmpty && d.name.trim().isNotEmpty) {
+        deptMap[d.id.trim()] = d.name.trim();
+      }
+    }
+    for (var p in patients) {
+      if (p.departmentId.trim().isNotEmpty && p.department.trim().isNotEmpty) {
+        if (!deptMap.containsKey(p.departmentId.trim())) {
+          deptMap[p.departmentId.trim()] = p.department.trim();
         }
       }
-      depts = deptMap.entries.map((e) => Department(id: e.key, name: e.value)).toList();
+    }
+
+    final combinedDepts = deptMap.entries
+        .map((e) => Department(id: e.key, name: e.value))
+        .toList();
+
+    if (combinedDepts.isNotEmpty) {
+      final currentExists = combinedDepts.any((d) => d.id == _selectedDeptId);
+      if (!currentExists) {
+        _selectedDeptId = combinedDepts.first.id;
+        _selectedDeptName = combinedDepts.first.name;
+      }
     }
 
     setState(() {
       _allPatients = patients;
-      _departments = depts;
+      _departments = combinedDepts;
       _applyFilter();
       _isLoading = false;
     });
@@ -52,8 +70,12 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
   void _applyFilter() {
     setState(() {
       _filteredPatients = _allPatients.where((p) {
-        final matchesDept = _selectedDeptId.isEmpty || p.departmentId == _selectedDeptId;
-        final matchesSearch = _searchQuery.isEmpty || p.name.toLowerCase().contains(_searchQuery.toLowerCase());
+        final matchesDept = _selectedDeptId.isEmpty ||
+            p.departmentId.trim().toLowerCase() == _selectedDeptId.trim().toLowerCase() ||
+            p.department.trim().toLowerCase() == _selectedDeptName.trim().toLowerCase();
+        final matchesSearch = _searchQuery.isEmpty ||
+            p.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            p.medCard.toLowerCase().contains(_searchQuery.toLowerCase());
         return matchesDept && matchesSearch;
       }).toList();
     });
@@ -84,12 +106,41 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Filter bar
+                if (_departments.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _departments.any((d) => d.id == _selectedDeptId)
+                          ? _selectedDeptId
+                          : _departments.first.id,
+                      decoration: InputDecoration(
+                        labelText: 'Отделение',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
+                      items: _departments.map((d) {
+                        return DropdownMenuItem<String>(
+                          value: d.id,
+                          child: Text(d.name, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          final selected = _departments.firstWhere((d) => d.id == val);
+                          setState(() {
+                            _selectedDeptId = selected.id;
+                            _selectedDeptName = selected.name;
+                            _applyFilter();
+                          });
+                        }
+                      },
+                    ),
+                  ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TextField(
                     decoration: InputDecoration(
-                      hintText: 'Поиск пациента',
+                      labelText: 'Поиск пациента по ФИО или медокарте',
                       prefixIcon: const Icon(Icons.search),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
@@ -100,42 +151,6 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
                     },
                   ),
                 ),
-                if (_departments.isNotEmpty)
-                  SizedBox(
-                    height: 48,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: const Text('Все отделения'),
-                            selected: _selectedDeptId.isEmpty,
-                            onSelected: (_) {
-                              setState(() {
-                                _selectedDeptId = '';
-                                _applyFilter();
-                              });
-                            },
-                          ),
-                        ),
-                        ..._departments.map((d) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(d.name),
-                                selected: _selectedDeptId == d.id,
-                                onSelected: (_) {
-                                  setState(() {
-                                    _selectedDeptId = d.id;
-                                    _applyFilter();
-                                  });
-                                },
-                              ),
-                            )),
-                      ],
-                    ),
-                  ),
                 const SizedBox(height: 8),
                 Expanded(
                   child: _filteredPatients.isEmpty
@@ -152,7 +167,7 @@ class _PatientsListScreenState extends State<PatientsListScreen> {
                                   patient.name,
                                   style: const TextStyle(fontWeight: FontWeight.bold),
                                 ),
-                                subtitle: Text('Мед. карта: ${patient.medCard} | ${patient.department}'),
+                                subtitle: Text('Отделение: ${patient.department}\nМед. карта: ${patient.medCard} | Возраст: ${patient.age} лет'),
                                 trailing: const Icon(Icons.chevron_right),
                                 onTap: () {
                                   Navigator.push(

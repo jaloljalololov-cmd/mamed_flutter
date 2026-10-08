@@ -145,7 +145,7 @@ class Repository {
         prescriptionId: docId,
         medicationId: i['medicationId'],
         medicationName: i['medicationName'],
-        quantity: i['quantity'],
+        quantity: (i['quantity'] as num).toDouble(),
         scheduleId: i['scheduleId'],
         scheduleName: i['scheduleName'],
         startDate: i['startDate'] ?? '',
@@ -153,6 +153,7 @@ class Repository {
       );
     }).toList();
 
+    // 1. Always save prescription locally in DB first (1-to-1 with Android)
     await _db.insertPrescription(p, itemEntities);
 
     final jsonPayload = {
@@ -166,11 +167,11 @@ class Repository {
         'medicationId': i['medicationId'],
         'medicationName': i['medicationName'],
         'quantity': i['quantity'],
-        'unitId': i['unitId'],
-        'unitName': i['unitName'],
+        'unitId': i['unitId'] ?? '',
+        'unitName': i['unitName'] ?? 'шт',
         'scheduleId': i['scheduleId'],
-        'startDate': i['startDate'],
-        'endDate': i['endDate'],
+        'startDate': i['startDate'] ?? '',
+        'endDate': i['endDate'] ?? '',
       }).toList(),
     };
 
@@ -192,7 +193,8 @@ class Repository {
         return 'Назначение выписано и отправлено в 1С';
       }
     } catch (e) {
-      return 'Сохранено локально ($e)';
+      final cleanErr = e.toString().replaceAll('Exception: ', '');
+      return 'Сохранено локально (1С: $cleanErr)';
     }
 
     return 'Сохранено локально';
